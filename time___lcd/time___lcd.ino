@@ -31,7 +31,38 @@ IPAddress gateway(192,168,1,1);
 IPAddress subnet(255,255,255,0);
 ESP8266WebServer server(80);
 
+String SendHTML(float Temperaturestat,float Humiditystat, int GetTime, int lamp_status)
+{
+  String ptr = "<!DOCTYPE html> <html>\n";
+  ptr +="<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\n";
+  ptr +="<title>ESP8266 Weather Report</title>\n";
+  ptr +="<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}\n";
+  ptr +="body{margin-top: 50px;} h1 {color: #444444;margin: 50px auto 30px;}\n";
+  ptr +="p {font-size: 24px;color: #444444;margin-bottom: 10px;}\n";
+  ptr +="</style>\n";
+  ptr +="</head>\n";
+  ptr +="<body>\n";
+  ptr +="<div id=\"webpage\">\n";
+  ptr +="<h1>ESP8266 NodeMCU Weather Report</h1>\n";
 
+  
+  ptr +="<p>Time: ";
+  ptr +=(int)GetTime;
+  ptr +="<p>Temperature: ";
+  ptr +=(int)Temperaturestat;
+  ptr +=" C</p>";
+  ptr +="<p>Humidity: ";
+  ptr +=(int)Humiditystat;
+  ptr +="%</p>";
+  ptr +="<p>Lamp: ";
+  (lamp_status==1) ? ptr +="ON" : ptr +="OFF";
+  
+  
+  ptr +="</div>\n";
+  ptr +="</body>\n";
+  ptr +="</html>\n";
+  return ptr;
+}
 
 const long utcOffsetInSeconds = 25200;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -112,67 +143,14 @@ void print_led() {
 }
 
 void handleRoot() {
-  const uint16_t lengt=1440; //max kol tochek trenda
-uint16_t tick=0;
-String date_write = timeClient.getFormattedTime();
-float h[lengt], t[lengt];
-  String trendstr;
-  
-  trendstr = F("<html>\
-  <head>\
-    <script type='text/javascript' src='https://www.gstatic.com/charts/loader.js'></script>\
-    <meta http-equiv='refresh' content='1000'/>\
-    <title>Daily temperature</title>\
-    <script type='text/javascript'>\
-      google.charts.load('current', {'packages':['corechart']});\
-      google.charts.setOnLoadCallback(drawChart);\
-\
-      function drawChart() {\
-        var data = new google.visualization.DataTable();\
-      data.addColumn('datetime', 'Time');\
-      data.addColumn('number', 'Temp, C');\
-      data.addColumn('number', 'Humidity, %');\
-\
-      data.addRows([");
-  uint16_t k, y=0;
-  for (int i=1; i <= lengt; i++){
-    k = tick-1 + i;
-    if (h[k]>0){
-      if (y>0) trendstr += ",";
-      y ++;
-      if (k>lengt-1) k = k - lengt;
-      trendstr += "[new Date(";
-      trendstr += String(date_write[k]-(7*3600)); //2- chasovoy poyas
-      trendstr += "*1000), ";
-      trendstr += t[k];
-      trendstr += ", ";
-      trendstr += h[k];
-      trendstr += "]";
-    }
-  }
-    trendstr += F("]);\
-\
-        var options = {width: '100%',\
-          title: 'Hibernation Box',\
-          curveType: 'function',\
-          legend: { position: 'bottom' },\
-          hAxis: {format: 'HH:mm',\
-          gridlines: {\
-            count: 10,\
-          },\
-        }\
-        };\
-\
-        var chart = new google.visualization.LineChart(document.getElementById('curve_chart'));\
-        var formatter = new google.visualization.DateFormat({pattern: 'HH:mm'});\
-        formatter.format(data, 0);\
-        chart.draw(data, options);\
-      }\
-    </script>\
-  </head>\
-  <body>\
-    <div id='curve_chart' style='width: 100%; height: 600px'></div>\
-  </body>\
-</html>");
-  server.send ( 200, F("text/html"), trendstr );
+  float Temperature = dht.readTemperature(); // получить значение температуры
+  float Humidity = dht.readHumidity();       // получить значение влажности
+  int NowTime = timeClient.getSeconds();
+  int led_onOff = (timeClient.getHours()>6 && timeClient.getHours()<22) ? 1 : 0;
+  server.send(200, "text/html", SendHTML(Temperature, Humidity, NowTime, led_onOff)); 
+}
+
+void handle_NotFound()
+{
+  server.send(404, "text/plain", "Not found");
 }
