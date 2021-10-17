@@ -6,6 +6,9 @@
 #include <ESP8266WebServer.h>
 #include "DHT.h"
 
+#define lamp_pin D7
+
+
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 #define DHTPIN 14
@@ -31,11 +34,11 @@ IPAddress gateway(192,168,1,1);
 IPAddress subnet(255,255,255,0);
 ESP8266WebServer server(80);
 
-String SendHTML(float Temperaturestat,float Humiditystat, int GetTime, int lamp_status)
+String SendHTML(float Temperaturestat, float Humiditystat, int GetTime_hour, int GetTime_minute, boolean lamp_status)
 {
   String ptr = "<!DOCTYPE html> <html>\n";
   ptr +="<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\n";
-  ptr +="<title>ESP8266 Weather Report</title>\n";
+  ptr +="<title>Hibernation Box</title>\n";
   ptr +="<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}\n";
   ptr +="body{margin-top: 50px;} h1 {color: #444444;margin: 50px auto 30px;}\n";
   ptr +="p {font-size: 24px;color: #444444;margin-bottom: 10px;}\n";
@@ -43,11 +46,13 @@ String SendHTML(float Temperaturestat,float Humiditystat, int GetTime, int lamp_
   ptr +="</head>\n";
   ptr +="<body>\n";
   ptr +="<div id=\"webpage\">\n";
-  ptr +="<h1>ESP8266 NodeMCU Weather Report</h1>\n";
+  ptr +="<h1>Hibernation Box. Status</h1>\n";
 
   
   ptr +="<p>Time: ";
-  ptr +=(int)GetTime;
+  ptr +=(int)GetTime_hour;
+  ptr +=":";
+  ptr +=(int)GetTime_minute;
   ptr +="<p>Temperature: ";
   ptr +=(int)Temperaturestat;
   ptr +=" C</p>";
@@ -71,8 +76,12 @@ char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursd
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 
+boolean flag_lamp();
 void setup()
 {
+  pinMode(lamp_pin, OUTPUT); // see #define lamp_pin 
+  digitalWrite(lamp_pin, 0);
+  
   Serial.begin(115200);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -99,22 +108,38 @@ lcd.backlight();      // Turn on the backlight.
 
 lcd.home();
 }
+
+void handleRoot() {
+  float Temperature = dht.readTemperature(); // получить значение температуры
+  float Humidity = dht.readHumidity();       // получить значение влажности
+  int Now_hour = timeClient.getHours();
+  int Now_minutes = timeClient.getMinutes();
+  server.send(200, "text/html", SendHTML(Temperature, Humidity, Now_hour, Now_minutes, flag_lamp())); 
+}
+
 void loop() 
 {
   timeClient.update();
 
   server.handleClient();
+
   
-  /*
-  if (millis() - millis_time >= interval_time) {
+  //  on/off Lamp
+  if (millis() - millis_time >= 10000) {
+    digitalWrite(lamp_pin, flag_lamp());
     millis_time = millis();
-    print_time();
-  }*/
+  } 
+  
   print_day();
   print_time();
   print_dht();
   print_led();  
 }
+
+ boolean flag_5sec() {  //set time working lamp//Flag on/off lamp  
+    return (timeClient.getSeconds()%10 >= 5)
+    ? 1 : 0;
+  }
 void print_day() {
   lcd.setCursor(5, 0);  // Move the cursor at origin
   lcd.print(daysOfTheWeek[timeClient.getDay()]);
@@ -135,22 +160,17 @@ void print_dht() {
 }
 void print_led() {
     lcd.setCursor(9, 3);  // Move the cursor at origin
-    if (timeClient.getHours()>6 && timeClient.getHours()<22) {
-  lcd.print("led.on");
-  } else {
-    lcd.print("led.off");
-  }
-}
-
-void handleRoot() {
-  float Temperature = dht.readTemperature(); // получить значение температуры
-  float Humidity = dht.readHumidity();       // получить значение влажности
-  int NowTime = timeClient.getSeconds();
-  int led_onOff = (timeClient.getHours()>6 && timeClient.getHours()<22) ? 1 : 0;
-  server.send(200, "text/html", SendHTML(Temperature, Humidity, NowTime, led_onOff)); 
+    (flag_lamp() == 1) ? lcd.print("led.on") : lcd.print("led.off");
 }
 
 void handle_NotFound()
 {
   server.send(404, "text/plain", "Not found");
 }
+
+boolean flag_lamp() {  //set time working lamp//Flag on/off lamp  
+    char _start = 6;
+    char _finish = 22;
+    return (timeClient.getHours()>=_start && timeClient.getHours()<=_finish) ? 1 : 0;
+  }
+  
